@@ -62,6 +62,7 @@ cuMemcpyDtoDAsync_func real_cuMemcpyDtoDAsync = NULL;
 cuGetProcAddress_func real_cuGetProcAddress = NULL;
 cuGetProcAddress_v2_func real_cuGetProcAddress_v2 = NULL;
 cuMemAllocManaged_func real_cuMemAllocManaged = NULL;
+cuMemAlloc_func real_cuMemAlloc = NULL;
 cuMemFree_func real_cuMemFree = NULL;
 cuMemGetInfo_func real_cuMemGetInfo = NULL;
 cuGetErrorString_func real_cuGetErrorString = NULL;
@@ -158,6 +159,11 @@ static void bootstrap_cuda(void)
 	dlerror();
 	real_cuMemAllocManaged = (cuMemAllocManaged_func)
 		real_dlsym_225(cuda_handle,CUDA_SYMBOL_STRING(cuMemAllocManaged));
+	error = dlerror();
+	if (error != NULL)
+		log_fatal("%s", error);
+	real_cuMemAlloc = (cuMemAlloc_func)
+		real_dlsym_225(cuda_handle,CUDA_SYMBOL_STRING(cuMemAlloc));
 	error = dlerror();
 	if (error != NULL)
 		log_fatal("%s", error);
@@ -670,9 +676,10 @@ CUresult cuMemAlloc(CUdeviceptr *dptr, size_t bytesize)
 	}
 
 	log_debug("cuMemAlloc requested %zu bytes", bytesize);
-	result = real_cuMemAllocManaged(dptr, bytesize, CU_MEM_ATTACH_GLOBAL);
-	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemAllocManaged));
-	log_debug("cuMemAllocManaged allocated %zu bytes at 0x%llx",
+	// result = real_cuMemAllocManaged(dptr, bytesize, CU_MEM_ATTACH_GLOBAL);
+	result = real_cuMemAlloc(dptr, bytesize, CU_MEM_ATTACH_GLOBAL);
+	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemAlloc));
+	log_debug("cuMemAlloc allocated %zu bytes at 0x%llx",
 		bytesize, *dptr);
 	if (result == CUDA_SUCCESS) {
 		insert_cuda_allocation(*dptr, bytesize);

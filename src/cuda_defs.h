@@ -111,6 +111,8 @@ typedef CUresult (*cuGetProcAddress_v2_func)(const char *symbol, void **pfn,
 	CUdriverProcAddressQueryResult *symbolStatus);
 typedef CUresult (*cuMemAllocManaged_func)(CUdeviceptr *dptr, size_t bytesize,
 	unsigned int flags);
+typedef CUresult (*cuMemAlloc_func)(CUdeviceptr *dptr, size_t bytesize,
+	unsigned int flags);
 typedef CUresult (*cuMemFree_func)(CUdeviceptr dptr);
 typedef CUresult (*cuMemGetInfo_func)(size_t *free, size_t *total);
 typedef CUresult (*cuGetErrorString_func)(CUresult error, const char **pStr);
@@ -184,6 +186,7 @@ extern CUresult cuMemcpyDtoDAsync(CUdeviceptr dstDevice,
 extern cuGetProcAddress_func real_cuGetProcAddress;
 extern cuGetProcAddress_v2_func real_cuGetProcAddress_v2;
 extern cuMemAllocManaged_func real_cuMemAllocManaged;
+extern cuMemAlloc_func real_cuMemAlloc;
 extern cuMemFree_func real_cuMemFree;
 extern cuMemGetInfo_func real_cuMemGetInfo;
 extern cuGetErrorString_func real_cuGetErrorString;
