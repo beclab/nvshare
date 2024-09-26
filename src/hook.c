@@ -324,6 +324,9 @@ static void initialize_libnvshare(void)
 		log_warn("Enabling GPU memory oversubscription for this"
 		         " application");
 	}
+	value = getenv(ENV_NVSHARE_MANAGED_MEMORY);
+	if (value != NULL && value[0] == '0')
+		__managed_memory = 0;
 
 	bootstrap_cuda();
 }
@@ -676,8 +679,8 @@ CUresult cuMemAlloc(CUdeviceptr *dptr, size_t bytesize)
 	}
 
 	log_debug("cuMemAlloc requested %zu bytes", bytesize);
-	// result = real_cuMemAllocManaged(dptr, bytesize, CU_MEM_ATTACH_GLOBAL);
-	result = real_cuMemAlloc(dptr, bytesize, CU_MEM_ATTACH_GLOBAL);
+	result = __managed_memory?real_cuMemAllocManaged(dptr, bytesize, CU_MEM_ATTACH_GLOBAL) : 
+	  real_cuMemAlloc(dptr, bytesize, CU_MEM_ATTACH_GLOBAL);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemAlloc));
 	log_debug("cuMemAlloc allocated %zu bytes at 0x%llx",
 		bytesize, *dptr);

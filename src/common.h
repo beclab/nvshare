@@ -8,6 +8,7 @@
 #include <string.h>
 
 extern int __debug;
+extern int __managed_memory;
 extern int pending_kernel_window;
 extern ssize_t write_whole(int fd, const void *buf, size_t count);
 extern ssize_t read_whole(int fd, void *buf, size_t count);
@@ -88,6 +89,7 @@ do {                                                                       \
 #define NVSHARE_UNREGISTERED_ID 0xF00DF00DF00DF00D
 
 #define ENV_NVSHARE_DEBUG         "NVSHARE_DEBUG"
+#define ENV_NVSHARE_MANAGED_MEMORY "NVSHARE_MANAGED_MEMORY"
 
 #endif /* _COMMON_H_ */
 

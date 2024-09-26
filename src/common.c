@@ -23,6 +23,7 @@
 #include "common.h"
 
 int __debug = 0;
+int __managed_memory = 1;
 
 
 /*
