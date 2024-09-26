@@ -8,4 +8,4 @@ nvshare*.tar.gz
 
 # Don't ignore this file
 !.gitignore
-
+!.github
