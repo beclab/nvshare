@@ -810,40 +810,40 @@ CUresult cuLaunchKernel(CUfunction f, unsigned int gridDimX,
 	 * trying to maintain a good throughput rate for smaller kernels.
 	 */
 	kern_since_sync++;
-	if (kern_since_sync >= pending_kernel_window) {
-		struct timespec cuda_cuda_sync_start_time = {0, 0};
-		struct timespec cuda_sync_complete_time = {0, 0};
-		struct timespec cuda_sync_duration = {0, 0};
-		true_or_exit(clock_gettime(CLOCK_MONOTONIC, &cuda_cuda_sync_start_time) == 0);
-		result = real_cuCtxSynchronize();
-		cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuCtxSynchronize));
-		true_or_exit(clock_gettime(CLOCK_MONOTONIC, &cuda_sync_complete_time) == 0);
-		timespecsub(&cuda_sync_complete_time, &cuda_cuda_sync_start_time, &cuda_sync_duration);
+	// if (kern_since_sync >= pending_kernel_window) {
+	// 	struct timespec cuda_cuda_sync_start_time = {0, 0};
+	// 	struct timespec cuda_sync_complete_time = {0, 0};
+	// 	struct timespec cuda_sync_duration = {0, 0};
+	// 	true_or_exit(clock_gettime(CLOCK_MONOTONIC, &cuda_cuda_sync_start_time) == 0);
+	// 	result = real_cuCtxSynchronize();
+	// 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuCtxSynchronize));
+	// 	true_or_exit(clock_gettime(CLOCK_MONOTONIC, &cuda_sync_complete_time) == 0);
+	// 	timespecsub(&cuda_sync_complete_time, &cuda_cuda_sync_start_time, &cuda_sync_duration);
 
-		/*
-		 * Possibly a series of huge kernels. We cannot risk to
-		 * simply fall back to previous window. Fall back to
-		 * the initial window of 1.
-		 */
-		if (cuda_sync_duration.tv_sec >= KERN_SYNC_DURATION_BIG)
-			pending_kernel_window = 1;
+	// 	/*
+	// 	 * Possibly a series of huge kernels. We cannot risk to
+	// 	 * simply fall back to previous window. Fall back to
+	// 	 * the initial window of 1.
+	// 	 */
+	// 	if (cuda_sync_duration.tv_sec >= KERN_SYNC_DURATION_BIG)
+	// 		pending_kernel_window = 1;
 
-		/*
-		 * Intermediate situation, don't be too harsh. Rein the
-		 * rate in.
-		 */
-		else if (cuda_sync_duration.tv_sec >= KERN_SYNC_WINDOW_STEPDOWN_THRESH)
-			pending_kernel_window = max(pending_kernel_window/2, 1);
+	// 	/*
+	// 	 * Intermediate situation, don't be too harsh. Rein the
+	// 	 * rate in.
+	// 	 */
+	// 	else if (cuda_sync_duration.tv_sec >= KERN_SYNC_WINDOW_STEPDOWN_THRESH)
+	// 		pending_kernel_window = max(pending_kernel_window/2, 1);
 
-		/*
-		 * Max window size is simply a heuristic.
-		 */
-		else pending_kernel_window = min(pending_kernel_window*2,
-				                 KERN_SYNC_WINDOW_MAX);
+	// 	/*
+	// 	 * Max window size is simply a heuristic.
+	// 	 */
+	// 	else pending_kernel_window = min(pending_kernel_window*2,
+	// 			                 KERN_SYNC_WINDOW_MAX);
 
-		log_debug("Pending Kernel Window is %d.", pending_kernel_window);
-		kern_since_sync = 0;
-	}
+	// 	kern_since_sync = 0;
+	// }
+	log_debug("Pending Kernel Window is %d.", pending_kernel_window);
 
 	true_or_exit(pthread_mutex_unlock(&kcount_mutex) == 0);
 	return result;
