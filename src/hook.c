@@ -843,7 +843,7 @@ CUresult cuLaunchKernel(CUfunction f, unsigned int gridDimX,
 
 	// 	kern_since_sync = 0;
 	// }
-	log_debug("Pending Kernel Window is %d.", pending_kernel_window);
+	// log_debug("Pending Kernel Window is %d.", pending_kernel_window);
 
 	true_or_exit(pthread_mutex_unlock(&kcount_mutex) == 0);
 	return result;
