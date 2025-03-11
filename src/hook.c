@@ -329,6 +329,7 @@ static void initialize_libnvshare(void)
 		__managed_memory = 0;
 
 	bootstrap_cuda();
+	log_debug("Initialized NVSHARE");
 }
 
 
