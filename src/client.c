@@ -402,6 +402,8 @@ wait_remainder:
 			                     &timer_end_ts);
 		/* We've locked global_mutex */
 		if (ret == ETIMEDOUT) {
+			log_debug("release early with %d seconds", (int)release_early_check_interval);
+
 			if (!scheduler_on || !own_lock) continue;
 			if (did_work) {
 				did_work = 0;
