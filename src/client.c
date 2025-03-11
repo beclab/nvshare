@@ -48,7 +48,7 @@ struct message req_lock_msg = {0};
 CUcontext cuda_ctx;
 int rsock;
 int scheduler_on;
-int release_early_check_interval = 30;
+int release_early_check_interval = 5;
 int own_lock;
 int need_lock;
 int did_work;
