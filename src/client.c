@@ -224,8 +224,8 @@ void initialize_client(void)
 #define true_or_retry_connect(condition)                                 \
 	do {                                                    \
 		if (!(condition))                               \
-			retry_connect("Condition failed: %s", \
-				  #condition);                  \
+			retry_connect("Condition failed: %s, %s, %d", \
+				  #condition, __FILE__, __LINE__);                  \
 	} while (0)
 
 
@@ -330,7 +330,7 @@ retry_connect:
 
 	while (1) {
 		true_or_retry_connect(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) == sizeof(in_msg));
-		true_or_retry_connect(pthread_mutex_lock(&global_mutex) == 0);
+		true_or_exit(pthread_mutex_lock(&global_mutex) == 0);
 
 		switch (in_msg.type) {
 		case LOCK_OK:
@@ -339,12 +339,12 @@ retry_connect:
 			need_lock = 0;
 			own_lock = 1;
 			did_work = 1; /* Restart the early release timer to avoid race */
-			true_or_retry_connect(pthread_cond_broadcast(&own_lock_cv) == 0);
-			true_or_retry_connect(pthread_cond_broadcast(&release_early_cv) == 0);
+			true_or_exit(pthread_cond_broadcast(&own_lock_cv) == 0);
+			true_or_exit(pthread_cond_broadcast(&release_early_cv) == 0);
 
 			break;
 		case DROP_LOCK:
-			true_or_retry_connect("Received %s", message_type_string[in_msg.type]);
+			log_debug("Received %s", message_type_string[in_msg.type]);
 
 			if (own_lock == 1) { /* Sanity check */
 				own_lock = 0; /* Block work submission */
@@ -374,7 +374,7 @@ retry_connect:
 				scheduler_on = 0;
 				own_lock = 1;
 				need_lock = 0;
-				true_or_retry_connect(pthread_cond_broadcast(&own_lock_cv) == 0);
+				true_or_exit(pthread_cond_broadcast(&own_lock_cv) == 0);
 			}
 			break;
 
@@ -385,7 +385,7 @@ retry_connect:
 		}
 		
 		/* Done with this messsage */
-		true_or_retry_connect(pthread_mutex_unlock(&global_mutex) == 0);
+		true_or_exit(pthread_mutex_unlock(&global_mutex) == 0);
 
 	}
 }
@@ -512,7 +512,7 @@ wait_remainder:
 			if(write_whole(rsock, &release_msg, sizeof(release_msg)) != sizeof(release_msg)){
 				log_warn("Failed to send LOCK_RELEASED message in early release thread");
 			}
-			
+
 			own_lock = 0;
 			log_debug("Sent %s", message_type_string[release_msg.type]);
 		} else if (ret != 0) { /* BAD */

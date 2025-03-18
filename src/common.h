@@ -48,15 +48,15 @@ do {                                                                       \
 #define true_or_exit(condition)                                 \
 	do {                                                    \
 		if (!(condition))                               \
-			log_fatal("Condition failed: %s", \
-				  #condition);                  \
+			log_fatal("Condition failed: %s, %s, %d", \
+				  #condition, __FILE__, __LINE__);                  \
 	} while (0)
 
 #define true_or_cuerr(condition)                                 \
 	do {                                                    \
 		if (!(condition)){                               \
-			log_warn("Condition failed: %s", \
-				  #condition);                  \
+			log_warn("Condition failed: %s, %s, %d", \
+				  #condition, __FILE__, __LINE__);                  \
 		    return CUDA_ERROR_UNKNOWN;                  \
 		}                                                 \		  
 	} while (0)	
@@ -64,8 +64,8 @@ do {                                                                       \
 #define true_or_err(condition)                                 \
 	do {                                                    \
 		if (!(condition)){                               \
-			log_warn("Condition failed: %s", \
-				  #condition);                  \
+			log_warn("Condition failed: %s, %s, %d", \
+				  #condition, __FILE__, __LINE__);                  \
 		    return -1;                  \
 		}                                                 \		  
 	} while (0)	
