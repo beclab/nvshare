@@ -85,6 +85,14 @@ pthread_mutex_t kcount_mutex;
 int enable_single_oversub = 0;
 int nvml_ok = 1;
 
+#define continue_with_lock_or_return_error() \
+	do { \
+		CUresult result = continue_with_lock(); \
+		if (result != CUDA_SUCCESS) { \
+			return result; \
+		} \
+	} while (0) 
+
 /* Representation of a CUDA memory allocation */
 struct cuda_mem_allocation {
 	CUdeviceptr ptr;
@@ -545,8 +553,8 @@ CUresult cuGetProcAddress(const char *symbol, void **pfn, int cudaVersion,
 	* Otherwise, real_cuGetProcAddress may be a NULL pointer
 	* when it is called.
 	*/
-	true_or_exit(pthread_once(&init_libnvshare_done, initialize_libnvshare) == 0);
-	true_or_exit(pthread_once(&init_done, initialize_client) == 0);
+	true_or_cuerr(pthread_once(&init_libnvshare_done, initialize_libnvshare) == 0);
+	true_or_cuerr(pthread_once(&init_done, initialize_client) == 0);
 	CUresult result = CUDA_SUCCESS;
 
 	if (real_cuGetProcAddress == NULL) return CUDA_ERROR_NOT_INITIALIZED;
@@ -600,8 +608,8 @@ CUresult cuGetProcAddress_v2(const char *symbol, void **pfn, int cudaVersion,
 	* Otherwise, real_cuGetProcAddress_v2 may be a
 	* NULL pointer when it is called.
 	*/
-	true_or_exit(pthread_once(&init_libnvshare_done, initialize_libnvshare) == 0);
-	true_or_exit(pthread_once(&init_done, initialize_client) == 0);
+	true_or_cuerr(pthread_once(&init_libnvshare_done, initialize_libnvshare) == 0);
+	true_or_cuerr(pthread_once(&init_done, initialize_client) == 0);
 	CUresult result = CUDA_SUCCESS;
 
 	if (real_cuGetProcAddress_v2 == NULL) return CUDA_ERROR_NOT_INITIALIZED;
@@ -784,12 +792,13 @@ CUresult cuLaunchKernel(CUfunction f, unsigned int gridDimX,
 	/* Return immediately if not initialized */
 	if (real_cuLaunchKernel == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
+
 	result = real_cuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX,
 		blockDimY, blockDimZ, sharedMemBytes, hStream, kernelParams, extra);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuLaunchKernel));
 
-	true_or_exit(pthread_mutex_lock(&kcount_mutex) == 0);
+	true_or_cuerr(pthread_mutex_lock(&kcount_mutex) == 0);
 
 
 	/*
@@ -814,10 +823,10 @@ CUresult cuLaunchKernel(CUfunction f, unsigned int gridDimX,
 		struct timespec cuda_cuda_sync_start_time = {0, 0};
 		struct timespec cuda_sync_complete_time = {0, 0};
 		struct timespec cuda_sync_duration = {0, 0};
-		true_or_exit(clock_gettime(CLOCK_MONOTONIC, &cuda_cuda_sync_start_time) == 0);
+		true_or_cuerr(clock_gettime(CLOCK_MONOTONIC, &cuda_cuda_sync_start_time) == 0);
 		result = real_cuCtxSynchronize();
 		cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuCtxSynchronize));
-		true_or_exit(clock_gettime(CLOCK_MONOTONIC, &cuda_sync_complete_time) == 0);
+		true_or_cuerr(clock_gettime(CLOCK_MONOTONIC, &cuda_sync_complete_time) == 0);
 		timespecsub(&cuda_sync_complete_time, &cuda_cuda_sync_start_time, &cuda_sync_duration);
 
 		/*
@@ -845,7 +854,7 @@ CUresult cuLaunchKernel(CUfunction f, unsigned int gridDimX,
 		kern_since_sync = 0;
 	}
 
-	true_or_exit(pthread_mutex_unlock(&kcount_mutex) == 0);
+	true_or_cuerr(pthread_mutex_unlock(&kcount_mutex) == 0);
 	return result;
 }
 
@@ -861,7 +870,7 @@ CUresult cuMemcpy(CUdeviceptr dst, CUdeviceptr src, size_t ByteCount)
 
 	if (real_cuMemcpy == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
 
 	result = real_cuMemcpy(dst, src, ByteCount);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemcpy));
@@ -877,7 +886,7 @@ CUresult cuMemcpyAsync(CUdeviceptr dst, CUdeviceptr src, size_t ByteCount,
 
 	if (real_cuMemcpyAsync == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
 
 	result = real_cuMemcpyAsync(dst, src, ByteCount, hStream);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemcpyAsync));
@@ -893,7 +902,7 @@ CUresult cuMemcpyDtoH(void *dstHost, CUdeviceptr srcDevice, size_t ByteCount)
 	/* Return immediately if not initialized */
 	if (real_cuMemcpyDtoH == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
 	result = real_cuMemcpyDtoH(dstHost, srcDevice, ByteCount);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemcpyDtoH));
 
@@ -909,7 +918,7 @@ CUresult cuMemcpyDtoHAsync(void* dstHost, CUdeviceptr srcDevice,
 	/* Return immediately if not initialized */
 	if (real_cuMemcpyDtoHAsync == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
 	result = real_cuMemcpyDtoHAsync(dstHost, srcDevice, ByteCount, hStream);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemcpyDtoHAsync));
 
@@ -925,7 +934,7 @@ CUresult cuMemcpyHtoD(CUdeviceptr dstDevice, const void* srcHost,
 	/* Return immediately if not initialized */
 	if (real_cuMemcpyHtoD == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
 	result = real_cuMemcpyHtoD(dstDevice, srcHost, ByteCount);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemcpyHtoD));
 
@@ -941,7 +950,7 @@ CUresult cuMemcpyHtoDAsync(CUdeviceptr dstDevice, const void* srcHost,
 	/* Return immediately if not initialized */
 	if (real_cuMemcpyHtoDAsync == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
 	result = real_cuMemcpyHtoDAsync(dstDevice, srcHost, ByteCount, hStream);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemcpyHtoDAsync));
 
@@ -957,7 +966,7 @@ CUresult cuMemcpyDtoD(CUdeviceptr dstDevice, CUdeviceptr srcDevice,
 	/* Return immediately if not initialized */
 	if (real_cuMemcpyDtoD == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
 	result = real_cuMemcpyDtoD(dstDevice, srcDevice, ByteCount);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemcpyDtoD));
 
@@ -973,7 +982,7 @@ CUresult cuMemcpyDtoDAsync(CUdeviceptr dstDevice, CUdeviceptr srcDevice,
 	/* Return immediately if not initialized */
 	if (real_cuMemcpyDtoDAsync == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	continue_with_lock();
+	continue_with_lock_or_return_error();
 	result = real_cuMemcpyDtoDAsync(dstDevice, srcDevice, ByteCount, hStream);
 	cuda_driver_check_error(result, CUDA_SYMBOL_STRING(cuMemcpyDtoDAsync));
 

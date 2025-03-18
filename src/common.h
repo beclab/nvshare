@@ -52,6 +52,24 @@ do {                                                                       \
 				  #condition);                  \
 	} while (0)
 
+#define true_or_cuerr(condition)                                 \
+	do {                                                    \
+		if (!(condition)){                               \
+			log_warn("Condition failed: %s", \
+				  #condition);                  \
+		    return CUDA_ERROR_UNKNOWN;                  \
+		}                                                 \		  
+	} while (0)	
+
+#define true_or_err(condition)                                 \
+	do {                                                    \
+		if (!(condition)){                               \
+			log_warn("Condition failed: %s", \
+				  #condition);                  \
+		    return -1;                  \
+		}                                                 \		  
+	} while (0)	
+
 
 #define MiB * (1 << 20)
 #define toMiB(x) (((double)x) / (1 MiB))
