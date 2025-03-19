@@ -9,3 +9,5 @@ nvshare*.tar.gz
 # Don't ignore this file
 !.gitignore
 !.github
+pkg/mod
+pkg/sumdb/sum.golang.org

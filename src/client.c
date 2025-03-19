@@ -32,8 +32,8 @@
 
 #include "comm.h"
 #include "common.h"
-#include "client.h"
 #include "cuda_defs.h"
+#include "client.h"
 
 void *client_fn(void *arg __attribute__((unused)));
 void *release_early_fn(void *arg __attribute__((unused)));
@@ -232,11 +232,11 @@ void initialize_client(void)
 void *client_fn(void *arg __attribute__((unused)))
 {
 	struct message in_msg;
-	struct message out_msg;
+	struct message out_msg,init_out_msg;
 	CUresult cu_err = CUDA_SUCCESS;
 
-	memset(&out_msg, 0, sizeof(out_msg));
-	out_msg.id = 1234;
+	memset(&init_out_msg, 0, sizeof(init_out_msg));
+	init_out_msg.id = 1234;
 
 	/*
 	 * Block every signal for this thread. We want the main thread of the
@@ -252,21 +252,22 @@ void *client_fn(void *arg __attribute__((unused)))
 		log_fatal("cuInit failed when initializing client");
 
 	if (getenv("KUBERNETES_SERVICE_HOST")) {
-		read_pod_namespace(out_msg.pod_namespace, sizeof(out_msg.pod_namespace));
-		read_pod_name(out_msg.pod_name, sizeof(out_msg.pod_name));
+		read_pod_namespace(init_out_msg.pod_namespace, sizeof(init_out_msg.pod_namespace));
+		read_pod_name(init_out_msg.pod_name, sizeof(init_out_msg.pod_name));
 	} else {
-		strlcpy(out_msg.pod_namespace, "none", sizeof(out_msg.pod_namespace));
-		strlcpy(out_msg.pod_name, "none", sizeof(out_msg.pod_name));
+		strlcpy(init_out_msg.pod_namespace, "none", sizeof(init_out_msg.pod_namespace));
+		strlcpy(init_out_msg.pod_name, "none", sizeof(init_out_msg.pod_name));
 	}
 
-	log_debug("NVSHARE_POD_NAME = %s", out_msg.pod_name);
-	log_debug("NVSHARE_POD_NAMESPACE = %s", out_msg.pod_namespace);
+	log_debug("NVSHARE_POD_NAME = %s", init_out_msg.pod_name);
+	log_debug("NVSHARE_POD_NAMESPACE = %s", init_out_msg.pod_namespace);
 
 	true_or_exit(nvshare_get_scheduler_path(nvscheduler_socket_path) == 0);
 
-	out_msg.type = REGISTER;
+	init_out_msg.type = REGISTER;
 
 retry_connect:	
+    memcpy(&out_msg, &init_out_msg, sizeof(out_msg));
 	if(nvshare_connect(&rsock, nvscheduler_socket_path) != 0){
 		// sleep for 10 seconds and retry to connect
 		sleep(10);
