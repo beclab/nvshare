@@ -32,8 +32,8 @@
 
 #include "comm.h"
 #include "common.h"
-#include "client.h"
 #include "cuda_defs.h"
+#include "client.h"
 
 void *client_fn(void *arg __attribute__((unused)));
 void *release_early_fn(void *arg __attribute__((unused)));
@@ -70,18 +70,19 @@ static void cuda_sync_context(void) {
 /*
  * Only returns if the client has the GPU lock or if the scheduler is off.
  */
-void continue_with_lock(void)
+CUresult continue_with_lock(void)
 {
 	CUresult cu_err = CUDA_SUCCESS;
 	static int cuda_ctx_ok = 0;
 
-	true_or_exit(pthread_mutex_lock(&global_mutex) == 0);
+	true_or_cuerr(pthread_mutex_lock(&global_mutex) == 0);
 	if (cuda_ctx_ok == 0) {
 		cu_err = real_cuCtxGetCurrent(&cuda_ctx);
 		cuda_driver_check_error(cu_err,
 				        CUDA_SYMBOL_STRING(cuCtxGetCurrent));
 		if (cu_err != CUDA_SUCCESS) {
-			log_fatal("Can't get app's CUDA context!");
+			log_warn("Can't get app's CUDA context!");
+			return cu_err;
 		}
 		cuda_ctx_ok = 1;
 	}
@@ -92,17 +93,19 @@ void continue_with_lock(void)
 		 */
 		if (need_lock == 0) {
 			need_lock = 1;
-			true_or_exit(write_whole(rsock, &req_lock_msg, sizeof(req_lock_msg)) == sizeof(req_lock_msg));
+			true_or_cuerr(write_whole(rsock, &req_lock_msg, sizeof(req_lock_msg)) == sizeof(req_lock_msg));
 		}
 
-		true_or_exit(pthread_cond_wait(&own_lock_cv, &global_mutex) == 0);
+		true_or_cuerr(pthread_cond_wait(&own_lock_cv, &global_mutex) == 0);
 	}
 
 	/* We did something. Reset the early release timer. */
 	did_work = 1;
-	true_or_exit(pthread_cond_broadcast(&release_early_cv) == 0);
+	true_or_cuerr(pthread_cond_broadcast(&release_early_cv) == 0);
 
-	true_or_exit(pthread_mutex_unlock(&global_mutex) == 0);
+	true_or_cuerr(pthread_mutex_unlock(&global_mutex) == 0);
+
+	return cu_err;
 }
 
 
@@ -210,14 +213,30 @@ void initialize_client(void)
  * 1. Registers client to the nvshare-scheduler
  * 2. Listens for messages from the nvshare-scheduler on a persistent connection
  */
+#define retry_connect(msg, ...) \
+	do {						\
+		log_warn(msg, ##__VA_ARGS__);	\
+		close(rsock);					\
+		sleep(10);						\
+		goto retry_connect;				\
+	}  while(0)
+
+#define true_or_retry_connect(condition)                                 \
+	do {                                                    \
+		if (!(condition))                               \
+			retry_connect("Condition failed: %s, %s, %d", \
+				  #condition, __FILE__, __LINE__);                  \
+	} while (0)
+
+
 void *client_fn(void *arg __attribute__((unused)))
 {
 	struct message in_msg;
-	struct message out_msg;
+	struct message out_msg,init_out_msg;
 	CUresult cu_err = CUDA_SUCCESS;
 
-	memset(&out_msg, 0, sizeof(out_msg));
-	out_msg.id = 1234;
+	memset(&init_out_msg, 0, sizeof(init_out_msg));
+	init_out_msg.id = 1234;
 
 	/*
 	 * Block every signal for this thread. We want the main thread of the
@@ -233,33 +252,50 @@ void *client_fn(void *arg __attribute__((unused)))
 		log_fatal("cuInit failed when initializing client");
 
 	if (getenv("KUBERNETES_SERVICE_HOST")) {
-		read_pod_namespace(out_msg.pod_namespace, sizeof(out_msg.pod_namespace));
-		read_pod_name(out_msg.pod_name, sizeof(out_msg.pod_name));
+		read_pod_namespace(init_out_msg.pod_namespace, sizeof(init_out_msg.pod_namespace));
+		read_pod_name(init_out_msg.pod_name, sizeof(init_out_msg.pod_name));
 	} else {
-		strlcpy(out_msg.pod_namespace, "none", sizeof(out_msg.pod_namespace));
-		strlcpy(out_msg.pod_name, "none", sizeof(out_msg.pod_name));
+		strlcpy(init_out_msg.pod_namespace, "none", sizeof(init_out_msg.pod_namespace));
+		strlcpy(init_out_msg.pod_name, "none", sizeof(init_out_msg.pod_name));
 	}
 
-	log_debug("NVSHARE_POD_NAME = %s", out_msg.pod_name);
-	log_debug("NVSHARE_POD_NAMESPACE = %s", out_msg.pod_namespace);
+	log_debug("NVSHARE_POD_NAME = %s", init_out_msg.pod_name);
+	log_debug("NVSHARE_POD_NAMESPACE = %s", init_out_msg.pod_namespace);
 
 	true_or_exit(nvshare_get_scheduler_path(nvscheduler_socket_path) == 0);
 
-	out_msg.type = REGISTER;
+	init_out_msg.type = REGISTER;
 
-	true_or_exit(nvshare_connect(&rsock, nvscheduler_socket_path) == 0);
-	true_or_exit(write_whole(rsock, &out_msg, sizeof(out_msg)) == sizeof(out_msg));
+retry_connect:	
+    memcpy(&out_msg, &init_out_msg, sizeof(out_msg));
+	if(nvshare_connect(&rsock, nvscheduler_socket_path) != 0){
+		// sleep for 10 seconds and retry to connect
+		sleep(10);
+		goto retry_connect;
+	}
+
+	if(write_whole(rsock, &out_msg, sizeof(out_msg)) != sizeof(out_msg)){
+		retry_connect("Failed to write client into to scheduler");
+	}
+
 	log_debug("Sent %s", message_type_string[out_msg.type]);
 
 	/*
 	 * Obtain the inital nvshare-scheduler status
 	 */
-	true_or_exit(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) == sizeof(in_msg));
+	memset(&in_msg, 0, sizeof(in_msg));
+	if(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) != sizeof(in_msg)){
+		retry_connect("Failed to read nvshare-scheduler status");
+	}
+
 	switch (in_msg.type) {
 	case SCHED_ON:
 		log_debug("Received %s", message_type_string[in_msg.type]);
 
-		true_or_exit(sscanf(in_msg.data, "%" SCNx64, &nvshare_client_id) == 1);
+		if(sscanf(in_msg.data, "%" SCNx64, &nvshare_client_id) != 1){
+			retry_connect("Failed to parse nvshare-scheduler client ID");
+		}
+
 		log_info("Successfully initialized nvshare GPU");
 		log_info("Client ID = %016" PRIx64, nvshare_client_id);
 		scheduler_on = 1;
@@ -270,7 +306,9 @@ void *client_fn(void *arg __attribute__((unused)))
 	case SCHED_OFF:
 		log_debug("Received %s", message_type_string[in_msg.type]);
 
-		true_or_exit(sscanf(in_msg.data, "%" SCNx64, &nvshare_client_id) == 1);
+		if(sscanf(in_msg.data, "%" SCNx64, &nvshare_client_id) != 1){
+			retry_connect("Failed to parse nvshare-scheduler client ID");
+		}
 		log_info("Successfully initialized nvshare GPU");
 		log_info("Client ID = %016" PRIx64, nvshare_client_id);
 		scheduler_on = 0;
@@ -279,19 +317,20 @@ void *client_fn(void *arg __attribute__((unused)))
 
 		break;
 	default:
-		log_fatal("Got message with type (%d) instead of initial"
+		retry_connect("Got message with type (%d) instead of initial"
 			  " nvshare-scheduler status", (int)in_msg.type);
-		break;
 	}
 
 	/* The ID will not change henceforth. Fill it in now. */
 	memset(&out_msg, 0, sizeof(out_msg));
 	out_msg.id = nvshare_client_id;
 
-	true_or_exit(sem_post(&got_initial_sched_status) == 0);
+	if(sem_post(&got_initial_sched_status) != 0){
+		retry_connect("Failed to post semaphore");
+	}
 
 	while (1) {
-		true_or_exit(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) == sizeof(in_msg));
+		true_or_retry_connect(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) == sizeof(in_msg));
 		true_or_exit(pthread_mutex_lock(&global_mutex) == 0);
 
 		switch (in_msg.type) {
@@ -312,7 +351,10 @@ void *client_fn(void *arg __attribute__((unused)))
 				own_lock = 0; /* Block work submission */
 				cuda_sync_context(); /* Ensure all submitted work done */
 				out_msg.type = LOCK_RELEASED;
-				true_or_exit(write_whole(rsock, &out_msg, sizeof(out_msg)) == sizeof(out_msg));
+				if(write_whole(rsock, &out_msg, sizeof(out_msg)) != sizeof(out_msg)){
+					true_or_exit(pthread_mutex_unlock(&global_mutex) == 0);
+					retry_connect("Failed to send LOCK_RELEASED");
+				}
 				log_debug("Sent %s", message_type_string[out_msg.type]);
 			}
 
@@ -471,7 +513,10 @@ wait_remainder:
 
 			/* IDLE */
 			log_debug("Releasing the lock early due to inactivity");
-			true_or_exit(write_whole(rsock, &release_msg, sizeof(release_msg)) == sizeof(release_msg));
+			if(write_whole(rsock, &release_msg, sizeof(release_msg)) != sizeof(release_msg)){
+				log_warn("Failed to send LOCK_RELEASED message in early release thread");
+			}
+
 			own_lock = 0;
 			log_debug("Sent %s", message_type_string[release_msg.type]);
 		} else if (ret != 0) { /* BAD */

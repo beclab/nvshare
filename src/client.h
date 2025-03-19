@@ -17,7 +17,7 @@
 #ifndef _NVSHARE_CLIENT_H
 #define _NVSHARE_CLIENT_H
 
-extern void continue_with_lock(void);
+extern CUresult continue_with_lock(void);
 extern void initialize_client(void);
 
 #endif /* _NVSHARE_CLIENT_H */

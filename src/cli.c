@@ -87,7 +87,7 @@ static int change_tq(int newtq)
 		log_fatal("nvshare_connect() failed");
 	if (write_whole(rsock, &msg, sizeof(msg)) != sizeof(msg))
 		ret = -1;
-	true_or_exit(close(rsock) == 0);
+	true_or_err(close(rsock) == 0);
 
 	return ret;
 }
@@ -105,10 +105,10 @@ static int change_status(int status)
 	msg.id = 0xBEEF;
 
 	ret = 0;
-	true_or_exit(nvshare_connect(&rsock, nvscheduler_socket_path) == 0);
+	true_or_err(nvshare_connect(&rsock, nvscheduler_socket_path) == 0);
 	if (write_whole(rsock, &msg, sizeof(msg)) != sizeof(msg))
 		ret = -1;
-	true_or_exit(close(rsock) == 0);
+	true_or_err(close(rsock) == 0);
 
 	return ret;
 }
