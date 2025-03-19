@@ -350,7 +350,10 @@ retry_connect:
 				own_lock = 0; /* Block work submission */
 				cuda_sync_context(); /* Ensure all submitted work done */
 				out_msg.type = LOCK_RELEASED;
-				true_or_retry_connect(write_whole(rsock, &out_msg, sizeof(out_msg)) == sizeof(out_msg));
+				if(write_whole(rsock, &out_msg, sizeof(out_msg)) != sizeof(out_msg)){
+					true_or_exit(pthread_mutex_unlock(&global_mutex) == 0);
+					retry_connect("Failed to send LOCK_RELEASED");
+				}
 				log_debug("Sent %s", message_type_string[out_msg.type]);
 			}
 
